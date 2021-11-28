@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "lib": ["es2019"],
+    "module": "commonjs",
+    "target": "es2019",
+    "outDir": "build/src/",
+    "rootDir": "src/",
+    "strict": true,
+    "moduleResolution": "node",
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": false,
+    "declaration": true,
+    "declarationDir": "build/src/",
+    "allowSyntheticDefaultImports": true,
+    "allowUnreachableCode": false,
+    "typeRoots": ["node_modules/@types"],
+    "types": ["node", "jest"],
+    "baseUrl": "./",
+    "paths": {
+      "src/*": ["./src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "example-consuming-client", "test", "build"]
+}

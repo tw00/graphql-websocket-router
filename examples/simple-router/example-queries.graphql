@@ -1,0 +1,21 @@
+fragment episode on Episode {
+  id
+  name
+  air_date
+  episode
+  created
+}
+
+query GetEpisodeById($id: ID!) {
+  episode(id: $id) {
+    ...episode
+  }
+}
+
+query GetEpisodes {
+  episodes {
+    results {
+      ...episode
+    }
+  }
+}

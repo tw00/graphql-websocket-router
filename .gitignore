@@ -1,0 +1,7 @@
+/*.js
+build
+.DS_Store
+node_modules
+*.swp
+.nyc_output
+_backup
