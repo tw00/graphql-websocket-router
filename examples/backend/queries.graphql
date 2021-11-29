@@ -1,0 +1,11 @@
+query GetHello {
+  hello
+}
+
+query GetHelloLive @live {
+  hello
+}
+
+subscription OnGreetings {
+  greetings
+}
