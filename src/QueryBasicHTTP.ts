@@ -1,33 +1,29 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { AxiosInstance, AxiosRequestConfig, AxiosError } from "axios";
-import { DocumentNode, parse, print } from "graphql";
-import { IncomingHttpHeaders } from "http";
-import { ILiveQueryOptions, IMessageResponse, RouterFn } from ".";
-import Logger from "./Logger";
-import { IResponse } from "./types";
+import {
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosError,
+  AxiosRequestHeaders,
+} from "axios";
+import { print } from "graphql";
 
-export class LiveQuery {
-  public operationName?: string;
+import type {
+  IMessageResponse,
+  IConstructorRouteOptions,
+  RouterFn,
+} from "./types";
+import { QueryBase } from "./QueryBase";
 
+export class QueryBasicHTTP extends QueryBase {
   private axios!: AxiosInstance;
-  private schema!: DocumentNode;
-  private logger!: Logger;
 
-  constructor(options: ILiveQueryOptions) {
-    // console.log("LiveQuery", options);
-    this.logger = new Logger();
-    this.schema =
-      typeof options.schema === "string"
-        ? parse(options.schema)
-        : options.schema;
-    this.axios = options.axios;
-    this.operationName = options.operationName;
+  constructor(options: IConstructorRouteOptions) {
+    super(options);
+    this.axios = options.axios!;
   }
 
   public asMessageResponder(): RouterFn {
     return async (msg, next) => {
       const { variables, headers = {} } = msg;
-      // const { operation } = msg;
 
       const operation = this.operationName as string;
       const providedVariables = variables;
@@ -44,32 +40,21 @@ export class LiveQuery {
       //   return;
       // }
 
-      const { statusCode, body: responseBody } = await this.makeRequest(
+      const { statusCode, data, error } = await this.makeRequest(
         operation,
         assembledVariables,
         headers
       );
 
-      console.log("XXX", {
-        statusCode,
-        responseBody,
-        errors: responseBody.errors,
-      });
-
-      /* TODO:
-      susbcribeRequest(operation, assembledVariables, next)
-      */
-
-      // res.status(statusCode).json(responseBody);
-      next({ statusCode, responseBody });
+      next({ statusCode, data, error });
     };
   }
 
   private async makeRequest(
     operationName: string,
     variables: Record<string, unknown>,
-    headers: IncomingHttpHeaders = {}
-  ): Promise<IResponse> {
+    headers: AxiosRequestHeaders = {}
+  ): Promise<IMessageResponse> {
     const { axios, schema } = this;
 
     this.logger.info(
@@ -86,7 +71,6 @@ export class LiveQuery {
       },
       headers,
     };
-    console.log("config.data", config.data);
 
     try {
       const { data, status } = await axios(config);
@@ -97,7 +81,7 @@ export class LiveQuery {
         );
       });
 
-      return <IResponse>{ body: data, statusCode: status };
+      return <IMessageResponse>{ data, statusCode: status };
     } catch (error: unknown) {
       if (!(error instanceof Error)) {
         throw new Error("UNKOWN");
@@ -108,27 +92,25 @@ export class LiveQuery {
         this.logger.error(axiosError.stack as string);
 
         if (axiosError.response) {
-          return <IResponse>{
-            body: axiosError.response.data,
+          return <IMessageResponse>{
             statusCode: axiosError.response.status,
+            data: axiosError.response.data,
           };
         }
 
         if (axiosError.message.indexOf("timeout") >= 0) {
-          return <IResponse>{
+          return <IMessageResponse>{
             statusCode: 504,
-            body: {
-              error: axiosError.message,
-            },
+            data: null,
+            error: axiosError.message,
           };
         }
       }
 
-      return <IResponse>{
+      return <IMessageResponse>{
         statusCode: 500,
-        body: {
-          error: error.message,
-        },
+        data: null,
+        error: error.message,
       };
     }
   }

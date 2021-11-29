@@ -2,13 +2,14 @@ import {
   AxiosBasicCredentials,
   AxiosProxyConfig,
   AxiosInstance,
-  AxiosTransformer,
+  AxiosRequestHeaders,
 } from "axios";
 import { DocumentNode } from "graphql";
+import { Client as GraphQLWebSocketClient } from "graphql-ws";
 import { IncomingHttpHeaders } from "http";
 
 export interface IGlobalConfiguration {
-  cacheEngine?: ICacheEngine;
+  // cacheEngine?: ICacheEngine;
   defaultTimeoutInMs?: number;
   defaultCacheTimeInMs?: number;
   logger?: ILogger;
@@ -22,16 +23,16 @@ export interface IGlobalConfiguration {
   proxy?: AxiosProxyConfig;
 }
 
-// TODO: DOppelt
 export interface IConstructorRouteOptions {
   schema: DocumentNode | string; // GraphQL Document Type
   operationName: string;
-  axios: AxiosInstance;
+  axios?: AxiosInstance;
+  wsClient?: GraphQLWebSocketClient;
   logger?: ILogger;
   logLevel: LogLevel;
   path?: string;
   cacheTimeInMs?: number;
-  cacheEngine?: ICacheEngine;
+  // cacheEngine?: ICacheEngine;
   method?: string;
   passThroughHeaders?: string[];
   cacheKeyIncludedHeaders?: string[];
@@ -39,20 +40,6 @@ export interface IConstructorRouteOptions {
   defaultVariables?: Record<string, unknown>;
 }
 
-export interface IRouteOptions {
-  path?: string;
-  logger?: ILogger;
-  logLevel?: LogLevel;
-  cacheTimeInMs?: number;
-  cacheEngine?: ICacheEngine;
-  method?: string;
-  passThroughHeaders?: string[];
-  cacheKeyIncludedHeaders?: string[];
-  staticVariables?: Record<string, unknown>;
-  defaultVariables?: Record<string, unknown>;
-  transformRequest?: AxiosTransformer;
-  transformResponse?: AxiosTransformer;
-}
 
 export interface IOperationVariableMap {
   [variableName: string]: IOperationVariable;
@@ -66,6 +53,7 @@ export interface IOperationVariable {
   defaultValue?: string | boolean | number | null;
 }
 
+/*
 export interface ICacheEngine {
   get: (
     key: string,
@@ -77,6 +65,30 @@ export interface ICacheEngine {
     cacheTimeInMs?: number
   ) => void | Promise<void>;
 }
+*/
+
+export interface IMessageResponse {
+  statusCode: number;
+  data: unknown;
+  error?: unknown;
+}
+
+export interface INamedGraphQLQuery {
+  operation?: string; // TODO
+  variables: Record<string, unknown>;
+  headers?: AxiosRequestHeaders;
+}
+
+export interface IInputMessage extends INamedGraphQLQuery {
+  method: string;
+}
+
+export type RouterFn = (
+  msg: INamedGraphQLQuery,
+  next: (msg: IMessageResponse) => void
+) => Promise<void>;
+
+export type RouterMap = Record<string, RouterFn>;
 
 export interface ILogger {
   error: (message: string) => void;
@@ -94,36 +106,3 @@ export interface ILogLevels {
   INFO: LogLevel;
   DEBUG: LogLevel;
 }
-
-export interface IResponse {
-  statusCode: number;
-  body: any;
-}
-
-export interface INamedGraphQLQuery {
-  operation?: string; // TODO
-  variables: Record<string, unknown>;
-  headers?: IncomingHttpHeaders;
-}
-
-export interface IInputMessage extends INamedGraphQLQuery {
-  method: string;
-}
-
-export interface IMessageResponse {
-  statusCode: number;
-  responseBody: any;
-}
-
-export interface ILiveQueryOptions {
-  operationName: string;
-  schema: DocumentNode | string;
-  axios: AxiosInstance;
-}
-
-export type RouterFn = (
-  msg: INamedGraphQLQuery,
-  next: (msg: IMessageResponse) => void
-) => Promise<void>;
-
-export type RouterMap = Record<string, RouterFn>;

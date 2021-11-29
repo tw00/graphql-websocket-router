@@ -5,20 +5,33 @@ import {
   getOperationAST,
   separateOperations,
 } from "graphql";
+import { Client as GraphQLWebSocketClient, createClient } from "graphql-ws";
+import * as ws from "ws";
+import { checkIsLiveQuery, uuid } from "./utils";
 
-// import Route from "./Route";
 import traverseAndBuildOptimizedQuery from "./traverseAndBuildOptimizedQuery";
-import { IGlobalConfiguration, IConstructorRouteOptions } from "./types";
 import { LogLevels } from "./Logger";
-import { LiveQuery } from "./LiveQuery";
-import { IMessageResponse, RouterMap } from "./types";
+import { QuerySubscribe } from "./QuerySubscribe";
+import { QueryLive } from "./QueryLive";
+import { QueryBasicHTTP } from "./QueryBasicHTTP";
+import { QueryBasicWS } from "./QueryBasicWS";
+import { createSubscriptionHashStable, parseBuffer } from "./utils";
+
+import type {
+  RouterMap,
+  IGlobalConfiguration,
+  IConstructorRouteOptions,
+} from "./types";
+import type { WebSocketBehavior } from "uWebSockets.js";
+
+type Query = QuerySubscribe | QueryLive | QueryBasicHTTP | QueryBasicWS;
 
 // TODO: Fix this in ts config and change to import
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const version = require("../package.json").version;
 
 const DEFAULT_CONFIGURATION: IGlobalConfiguration = {
-  cacheEngine: undefined,
+  // cacheEngine: undefined,
   logger: undefined,
   auth: undefined,
   proxy: undefined,
@@ -33,8 +46,10 @@ export default class Router {
   private schema: DocumentNode;
   private options: IGlobalConfiguration;
 
-  public queries: LiveQuery[] = [];
-  public axios: AxiosInstance;
+  public queries: Query[] = [];
+  public axios: AxiosInstance | undefined;
+  public wsClient: GraphQLWebSocketClient | undefined;
+  public isHttpEndpoint: boolean;
 
   private passThroughHeaders: string[] = [];
   public endpoint: string;
@@ -61,17 +76,27 @@ export default class Router {
       },
     };
 
-    const axiosConfig: AxiosRequestConfig = {
-      baseURL: endpoint,
-      method: "post",
-      headers: options.headers,
-      timeout,
-      auth,
-      proxy,
-      responseType: "json",
-    };
+    if (endpoint.startsWith("http")) {
+      this.isHttpEndpoint = true;
 
-    this.axios = axios.create(axiosConfig);
+      this.axios = axios.create({
+        baseURL: endpoint,
+        method: "post",
+        // headers: options.headers,
+        timeout,
+        auth,
+        proxy,
+        responseType: "json",
+      });
+    } else {
+      this.isHttpEndpoint = false;
+
+      this.wsClient = createClient({
+        url: endpoint,
+        webSocketImpl: ws,
+        generateID: () => uuid(),
+      });
+    }
 
     if (passThroughHeaders) {
       this.passThroughHeaders = passThroughHeaders;
@@ -118,22 +143,23 @@ export default class Router {
   public mount(
     _operationName: string,
     options?: IConstructorRouteOptions | { passThroughHeaders: string[] }
-  ): LiveQuery {
+  ): Query {
     const {
       schema: defaultSchema,
       axios,
+      wsClient,
       options: {
         logger,
         defaultLogLevel,
-        cacheEngine,
+        // cacheEngine,
         defaultCacheTimeInMs,
         cacheKeyIncludedHeaders,
       },
     } = this;
 
-    const isOperationName =
-      defaultSchema && Boolean(getOperationAST(defaultSchema, _operationName));
-    const operationName = isOperationName ? _operationName : undefined;
+    const opInfo = getOperationAST(defaultSchema, _operationName);
+    const isOperationName = defaultSchema && Boolean(opInfo);
+    // const operationName = isOperationName ? _operationName : undefined;
     const schema = isOperationName
       ? this.queryForOperation(_operationName)
       : parse(_operationName);
@@ -146,8 +172,9 @@ export default class Router {
       ...options,
       operationName: _operationName,
       axios,
+      wsClient,
       schema,
-      cacheEngine,
+      // cacheEngine,
       cacheTimeInMs: defaultCacheTimeInMs,
       cacheKeyIncludedHeaders,
       logger,
@@ -155,13 +182,32 @@ export default class Router {
       passThroughHeaders,
     };
 
-    const graphQLRoute = new LiveQuery(routeOptions);
-    this.queries.push(graphQLRoute);
+    const isLiveQuery = checkIsLiveQuery(opInfo);
+    const isSubscription = opInfo?.operation === "subscription";
 
+    let graphQLRoute;
+    if (this.isHttpEndpoint) {
+      if (isSubscription || isLiveQuery) {
+        throw new Error(
+          "Subscriptions and live queries are not supported for http endpoints"
+        );
+      }
+      graphQLRoute = new QueryBasicHTTP(routeOptions);
+    } else {
+      if (isSubscription) {
+        graphQLRoute = new QuerySubscribe(routeOptions);
+      } else if (isLiveQuery) {
+        graphQLRoute = new QueryLive(routeOptions);
+      } else {
+        graphQLRoute = new QueryBasicWS(routeOptions);
+      }
+    }
+
+    this.queries.push(graphQLRoute);
     return graphQLRoute;
   }
 
-  asMessageResponders(): RouterMap {
+  public asMessageResponders(): RouterMap {
     const router = {};
 
     this.queries.forEach((route) => {
@@ -173,5 +219,63 @@ export default class Router {
     });
 
     return router;
+  }
+
+  public uWebSocketBehavior(): WebSocketBehavior {
+    this.mountAll();
+    const router = this.asMessageResponders();
+
+    return {
+      open: (ws) => {
+        return;
+      },
+      message: (ws, buffer, isBinary) => {
+        if (isBinary) {
+          ws.send(
+            JSON.stringify({ status: "BINARY_NOT_SUPPORTED" }),
+            isBinary,
+            false
+          );
+          return;
+        }
+
+        const message = parseBuffer(buffer);
+        console.log("received message:", message);
+
+        if (!message) {
+          return;
+        }
+
+        if (message?.method === "subscribe") {
+          ws.subscribe(createSubscriptionHashStable(message));
+          if (message.operation) {
+            router[message.operation](message, (msg) =>
+              ws.send(JSON.stringify(msg), isBinary, false)
+            );
+          }
+          return;
+        }
+
+        if (message?.method === "unsubscribe") {
+          ws.unsubscribe(createSubscriptionHashStable(message));
+          return;
+        }
+
+        if (message?.method === "query") {
+          if (message.operation) {
+            router[message.operation](message, (msg) =>
+              ws.send(JSON.stringify(msg), isBinary, false)
+            );
+          }
+          return;
+        }
+      },
+      drain: (ws) => {
+        return;
+      },
+      close: (ws, code, message) => {
+        /* The library guarantees proper unsubscription at close */
+      },
+    };
   }
 }
