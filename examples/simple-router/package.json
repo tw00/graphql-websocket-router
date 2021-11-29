@@ -1,0 +1,13 @@
+{
+  "name": "graphql-websocket-router-example",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.ts",
+  "scripts": {
+    "run": "ts-node ."
+  },
+  "devDependencies": {},
+  "dependencies": {
+    "uWebSockets.js": "uNetworking/uWebSockets.js#v20.3.0"
+  }
+}
