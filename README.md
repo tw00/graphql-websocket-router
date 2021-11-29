@@ -2,9 +2,17 @@
 
 GraphQL WebSocket Router allows you to expose an internal GraphQL API over Websocket without exposing the entire schema.
 
-### Schema (`client-queries.gql`)
+# Getting started
 
-```graphql
+GraphQL Rest Router is available via NPM as `graphql-websocket-router`
+
+```bash
+npm install --save graphql-websocket-router
+```
+
+## Queries (`queries.gql`)
+
+```gql
 # GraphQL Subscription
 subscription OnEvent($topic: String) {
   onEvent(topic: $topic) {
@@ -23,11 +31,31 @@ query GetEpisodeById($id: ID!) {
 }
 ```
 
-### WebSocket Protocol
+## Setting up the router/gateway with uWebSockets
+
+```ts
+import GraphQLWebsocketRouter from "graphql-websocket-router";
+import { App as uWebSocketApp } from "uWebSockets.js";
+import { readFileSync } from "fs";
+import { resolve } from "path";
+
+const api = new GraphQLWebsocketRouter(
+  "ws://localhost:4000/graphql",
+  readFileSync(resolve(__dirname, "queries.gql"), "utf-8")
+);
+
+uWebSocketApp()
+  .ws("/*", api.uWebSocketBehavior())
+  .listen(9001, (listenSocket) => {
+    if (listenSocket) {
+      console.log("Listening on port 9001");
+    }
+  });
+```
+
+## WebSocket Protocol
 
 ```js
-// TODO: Why not infer from query?
-
 // Example: Query
 >> { method: "query", operation: "GetEpisodeById", variables: { id: 1 } }
 << { status: "ok", data: { id: 1, name: "Episode One" } }
@@ -53,62 +81,48 @@ query GetEpisodeById($id: ID!) {
 << { status: "error", error: { message: "id is missing" } }
 ```
 
-# Getting started
+# Supported backends
 
-```
-npm install graphql-websocket-router
-```
+## Connecting to WebSocket backend
 
-## Set up server connecting to WebSocket
-
-Supports live queries, subscriptions, queries and mutations.
+Supports **live queries**, **subscriptions**, **queries** and **mutations**.
 
 ```ts
-import GraphQLWebsocketRouter from "graphql-websocket-router";
-import { App as uWebSocketApp } from "uWebSockets.js";
-import { readFileSync } from "fs";
-import { resolve } from "path";
+// ...
 
 const api = new GraphQLWebsocketRouter(
   "ws://localhost:4000/graphql",
-  readFileSync(resolve(__dirname, "../backend/queries.graphql"), "utf-8"),
+  readFileSync(resolve(__dirname, "queries.gql"), "utf-8"),
   { enableDeltaPatching: false }
 );
 
-uWebSocketApp()
-  .ws("/*", {
-    idleTimeout: 8 * 4,
-    ...api.uWebSocketBehavior(),
-  })
-  .listen(9001, (listenSocket) => {
-    if (listenSocket) {
-      console.log("Listening to port 9001");
-    }
-  });
+// ...
 ```
 
-## Set up server connecting to HTTP
+## Connecting to HTTP backend
 
-Supports queries and mutations only.
+Supports **queries** and **mutations** only.
 
 ```ts
 // ...
 
 const api = new GraphQLWebsocketRouter(
   "https://rickandmortyapi.com/graphql",
-  readFileSync(resolve(__dirname, "./example-queries.graphql"), "utf-8")
+  readFileSync(resolve(__dirname, "queries.gql"), "utf-8")
 );
 
 // ...
 ```
 
-## Client Example
+# Client Examples
+
+## Vanilla
 
 ```ts
 const socket = new WebSocket("ws://localhost:9001");
 
 socket.onopen = (event) => {
-  // Connection established
+  // connection established
   socket.send(
     JSON.stringify({
       method: "subscribe",
@@ -128,7 +142,7 @@ socket.onerror = (error) => {
 };
 ```
 
-## React Hook
+## React Hook (TBD)
 
 ```ts
 import { useLiveQuery } from "graphql-websocket-router/client/react";
@@ -143,7 +157,7 @@ export default function MyComponent() {
 }
 ```
 
-## Next.js
+## Next.js (TBD)
 
 ```ts
 import {
