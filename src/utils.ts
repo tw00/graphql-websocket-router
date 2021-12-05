@@ -9,8 +9,9 @@ export function parseBuffer(buffer: ArrayBuffer): IInputMessage | null {
   }
 }
 
-export function createSubscriptionHashStable(message: IInputMessage): string {
-  return `${message.operation}:${JSON.stringify(message.variables)}`;
+
+export function createSubscriptionHashStable(variables, headers): string {
+  return `${JSON.stringify(variables)}:${JSON.stringify(headers)}`;
 }
 
 export function uuid(): string {

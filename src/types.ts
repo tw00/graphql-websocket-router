@@ -6,7 +6,6 @@ import {
 } from "axios";
 import { DocumentNode } from "graphql";
 import { Client as GraphQLWebSocketClient } from "graphql-ws";
-import { IncomingHttpHeaders } from "http";
 
 export interface IGlobalConfiguration {
   // cacheEngine?: ICacheEngine;
@@ -26,8 +25,8 @@ export interface IGlobalConfiguration {
 export interface IConstructorRouteOptions {
   schema: DocumentNode | string; // GraphQL Document Type
   operationName: string;
-  axios?: AxiosInstance;
-  wsClient?: GraphQLWebSocketClient;
+  axios: AxiosInstance;
+  wsClient: GraphQLWebSocketClient;
   logger?: ILogger;
   logLevel: LogLevel;
   path?: string;
@@ -83,12 +82,24 @@ export interface IInputMessage extends INamedGraphQLQuery {
   method: string;
 }
 
-export type RouterFn = (
+export type SubscribeFn = (
+  cliendId: string,
   msg: INamedGraphQLQuery,
   next: (msg: IMessageResponse) => void
 ) => Promise<void>;
 
-export type RouterMap = Record<string, RouterFn>;
+export type UnsubscribeFn = (
+  clientId: string,
+  msg: INamedGraphQLQuery
+) => Promise<void>;
+
+export interface MessageResponder {
+  query: SubscribeFn;
+  subscribe: SubscribeFn;
+  unsubscribe: UnsubscribeFn;
+}
+
+export type RouterMap = Record<string, MessageResponder>;
 
 export interface ILogger {
   error: (message: string) => void;

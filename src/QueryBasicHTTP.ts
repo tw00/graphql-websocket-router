@@ -9,7 +9,7 @@ import { print } from "graphql";
 import type {
   IMessageResponse,
   IConstructorRouteOptions,
-  RouterFn,
+  MessageResponder,
 } from "./types";
 import { QueryBase } from "./QueryBase";
 
@@ -21,8 +21,8 @@ export class QueryBasicHTTP extends QueryBase {
     this.axios = options.axios!;
   }
 
-  public asMessageResponder(): RouterFn {
-    return async (msg, next) => {
+  public asMessageResponder(): Partial<MessageResponder> {
+    const subscribe = async (clientId, msg, next) => {
       const { variables, headers = {} } = msg;
 
       const operation = this.operationName as string;
@@ -48,6 +48,8 @@ export class QueryBasicHTTP extends QueryBase {
 
       next({ statusCode, data, error });
     };
+
+    return { subscribe };
   }
 
   private async makeRequest(

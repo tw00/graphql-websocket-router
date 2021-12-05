@@ -1,6 +1,10 @@
 import { print } from "graphql";
 import type { Client as GraphQLWebSocketClient } from "graphql-ws";
-import { IMessageResponse, IConstructorRouteOptions, RouterFn } from "./types";
+import {
+  IMessageResponse,
+  IConstructorRouteOptions,
+  MessageResponder,
+} from "./types";
 import { QueryBase } from "./QueryBase";
 
 export class QueryBasicWS extends QueryBase {
@@ -11,8 +15,8 @@ export class QueryBasicWS extends QueryBase {
     this.wsClient = options.wsClient!;
   }
 
-  public asMessageResponder(): RouterFn {
-    return async (msg, next) => {
+  public asMessageResponder(): Partial<MessageResponder> {
+    const query = async (clientId, msg, next) => {
       const { variables } = msg;
 
       const operation = this.operationName as string;
@@ -36,6 +40,10 @@ export class QueryBasicWS extends QueryBase {
       } catch (error) {
         console.log("FAILED WITH", error);
       }
+    };
+
+    return {
+      query,
     };
   }
 

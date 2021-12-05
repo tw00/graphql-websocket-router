@@ -182,12 +182,3 @@ export default function EpisodeDetails({ episodeQuery }) {
   // Render episode...
 }
 ```
-
-# TODO
-
-- [x] Support GraphQL Subscriptions
-- [ ] Support Live Queries
-- [ ] Support @defer/@stream directive
-- [ ] Support SSE HTTP backend
-- [ ] Support graphql-live-query-patch-jsondiffpatch
-- [ ] React client library

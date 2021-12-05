@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
+import axios, { AxiosInstance } from "axios";
 import {
   parse,
   DocumentNode,
@@ -15,10 +16,11 @@ import { QuerySubscribe } from "./QuerySubscribe";
 import { QueryLive } from "./QueryLive";
 import { QueryBasicHTTP } from "./QueryBasicHTTP";
 import { QueryBasicWS } from "./QueryBasicWS";
-import { createSubscriptionHashStable, parseBuffer } from "./utils";
+import { parseBuffer } from "./utils";
 
 import type {
   RouterMap,
+  MessageResponder,
   IGlobalConfiguration,
   IConstructorRouteOptions,
 } from "./types";
@@ -113,7 +115,6 @@ export default class Router {
 
     if (!schema) {
       console.warn("optimizeQueryRequest has no effect when not using schema");
-
       return schema;
     }
 
@@ -171,8 +172,8 @@ export default class Router {
     const routeOptions: IConstructorRouteOptions = {
       ...options,
       operationName: _operationName,
-      axios,
-      wsClient,
+      axios: axios!,
+      wsClient: wsClient!,
       schema,
       // cacheEngine,
       cacheTimeInMs: defaultCacheTimeInMs,
@@ -212,8 +213,15 @@ export default class Router {
 
     this.queries.forEach((route) => {
       const { operationName } = route;
+      console.log(`--> ${operationName} (${route.constructor.name})`);
+
       if (operationName) {
-        const routeFn = route.asMessageResponder();
+        const routeFn: Required<MessageResponder> = {
+          query: async () => {},
+          subscribe: async () => {},
+          unsubscribe: async () => {},
+          ...route.asMessageResponder(),
+        };
         router[operationName] = routeFn;
       }
     });
@@ -227,7 +235,9 @@ export default class Router {
 
     return {
       open: (ws) => {
-        return;
+        ws.clientId = uuid();
+        const ip = Buffer.from(ws.getRemoteAddressAsText()).toString();
+        console.log(`* new connection from ${ip} as ${ws.clientId}`);
       },
       message: (ws, buffer, isBinary) => {
         if (isBinary) {
@@ -240,41 +250,60 @@ export default class Router {
         }
 
         const message = parseBuffer(buffer);
-        console.log("received message:", message);
+        console.log(`* received message from ${ws.clientId}:`, message);
+        const clientId = ws.clientId;
 
         if (!message) {
+          throw new Error("Message missing");
+        }
+
+        if (!message.operation) {
+          throw new Error("Operation missing in message");
+        }
+
+        if (!message.method) {
+          throw new Error("Method missing in message");
+        }
+
+        if (!(message.operation in router)) {
+          throw new Error(`Operation ${message.operation} not supported`);
+        }
+
+        const responder: MessageResponder = router[message.operation];
+
+        if (message.method === "subscribe") {
+          // ws.subscribe(createSubscriptionHashStable(message));
+          responder.subscribe(clientId, message, (msg) => {
+            console.log(`* sending message to ${ws.clientId}:`, msg);
+            ws.send(JSON.stringify(msg), isBinary, false);
+          });
           return;
         }
 
-        if (message?.method === "subscribe") {
-          ws.subscribe(createSubscriptionHashStable(message));
+        if (message.method === "unsubscribe") {
+          // ws.unsubscribe(createSubscriptionHashStable(message));
+          responder.unsubscribe(clientId, message);
+        }
+
+        if (message.method === "query") {
           if (message.operation) {
-            router[message.operation](message, (msg) =>
-              ws.send(JSON.stringify(msg), isBinary, false)
-            );
-          }
-          return;
-        }
-
-        if (message?.method === "unsubscribe") {
-          ws.unsubscribe(createSubscriptionHashStable(message));
-          return;
-        }
-
-        if (message?.method === "query") {
-          if (message.operation) {
-            router[message.operation](message, (msg) =>
-              ws.send(JSON.stringify(msg), isBinary, false)
-            );
+            responder.query(clientId, message, (msg) => {
+              console.log("* sending message:", ws.clientId, msg);
+              ws.send(JSON.stringify(msg), isBinary, false);
+            });
           }
           return;
         }
       },
-      drain: (ws) => {
+      drain: () => {
         return;
       },
-      close: (ws, code, message) => {
-        /* The library guarantees proper unsubscription at close */
+      close: (ws) => {
+        console.log(`* closing. Good bye ${ws.clientId}`);
+
+        Object.keys(this.queries).forEach((operation) => {
+          this.queries[operation]?.closeClient(ws.clientId);
+        });
       },
     };
   }
