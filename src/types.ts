@@ -67,9 +67,10 @@ export interface ICacheEngine {
 */
 
 export interface IMessageResponse {
-  statusCode: number;
+  status: "ok" | "error";
   data: unknown;
-  error?: unknown;
+  error?: string;
+  errorDetails?: unknown;
 }
 
 export interface INamedGraphQLQuery {

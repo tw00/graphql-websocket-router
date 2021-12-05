@@ -38,13 +38,24 @@ export class QueryBasicWS extends QueryBase {
         const res = await this.makeQuery(operation, assembledVariables);
         next(res);
       } catch (error) {
-        console.log("FAILED WITH", error);
+        if (error instanceof Error || typeof error === "object") {
+          next({
+            status: "error",
+            data: null,
+            error: "UpstreamConnectionError",
+            errorDetails: { message: (error as Error)?.message },
+          });
+          console.error(
+            "* upstream connection error:",
+            (error as Error)?.message
+          );
+        } else {
+          throw error;
+        }
       }
     };
 
-    return {
-      query,
-    };
+    return { query };
   }
 
   private async makeQuery(
@@ -74,7 +85,7 @@ export class QueryBasicWS extends QueryBase {
         }
       );
 
-      return { statusCode: 200, data: result };
+      return { status: "ok", data: result };
     });
   }
 }

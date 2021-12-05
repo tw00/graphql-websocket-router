@@ -40,13 +40,13 @@ export class QueryBasicHTTP extends QueryBase {
       //   return;
       // }
 
-      const { statusCode, data, error } = await this.makeRequest(
+      const { status, data, error } = await this.makeRequest(
         operation,
         assembledVariables,
         headers
       );
 
-      next({ statusCode, data, error });
+      next({ status, data, error });
     };
 
     return { subscribe };
@@ -83,7 +83,10 @@ export class QueryBasicHTTP extends QueryBase {
         );
       });
 
-      return <IMessageResponse>{ data, statusCode: status };
+      return <IMessageResponse>{
+        data,
+        status: status === 200 ? "ok" : "error",
+      };
     } catch (error: unknown) {
       if (!(error instanceof Error)) {
         throw new Error("UNKOWN");
@@ -95,14 +98,17 @@ export class QueryBasicHTTP extends QueryBase {
 
         if (axiosError.response) {
           return <IMessageResponse>{
-            statusCode: axiosError.response.status,
+            status: "error",
             data: axiosError.response.data,
+            errorDetails: {
+              statusCode: axiosError.response.status,
+            },
           };
         }
 
         if (axiosError.message.indexOf("timeout") >= 0) {
           return <IMessageResponse>{
-            statusCode: 504,
+            status: "error", // 504,
             data: null,
             error: axiosError.message,
           };
@@ -110,7 +116,7 @@ export class QueryBasicHTTP extends QueryBase {
       }
 
       return <IMessageResponse>{
-        statusCode: 500,
+        status: "error", // 500,
         data: null,
         error: error.message,
       };

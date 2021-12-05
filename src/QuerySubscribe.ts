@@ -95,9 +95,17 @@ export class QuerySubscribe extends QueryBase {
     });
   }
 
-  private handleUpstreamConnectionError(error: Error) {
-    // TODO:
-    console.error("* upstream connection error:", error);
+  private handleUpstreamConnectionError(
+    error: Error,
+    onNext: (msg: IMessageResponse) => void
+  ) {
+    console.error("* upstream connection error:", error.message);
+    onNext({
+      status: "error",
+      data: null,
+      error: "UpstreamConnectionError",
+      errorDetails: { message: error.message },
+    });
   }
 
   private async makeSubscribe(
@@ -122,7 +130,8 @@ export class QuerySubscribe extends QueryBase {
       },
       {
         next: onNext,
-        error: (err) => this.handleUpstreamConnectionError(err as Error),
+        error: (err) =>
+          this.handleUpstreamConnectionError(err as Error, onNext),
         complete: () => {
           // TODO: upstream server has terminated connection
         },
